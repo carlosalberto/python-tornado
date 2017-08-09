@@ -161,3 +161,10 @@ class TestClientIntegration(tornado.testing.AsyncHTTPTestCase):
             'http.status_code': 200,
             'protocol': 'http',
         })
+
+        # Make sure the headers were injected/extracted,
+        # from the client to the server.
+        extracted_headers = tracer._tracer.extracted_headers
+        self.assertEqual(len(extracted_headers), 1)
+        self.assertEqual(extracted_headers[0].get('Ot-Format', None), 'http_headers')
+        self.assertEqual(extracted_headers[0].get('Ot-Headers', None), 'true')

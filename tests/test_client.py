@@ -1,7 +1,7 @@
 import unittest
 
 import tornado.gen
-from tornado.httpclient import HTTPError
+from tornado.httpclient import HTTPError, HTTPRequest
 import tornado.web
 import tornado.testing
 import tornado_opentracing
@@ -16,6 +16,9 @@ class MainHandler(tornado.web.RequestHandler):
 
 class ErrorHandler(tornado.web.RequestHandler):
     def get(self):
+        raise ValueError('invalid input')
+
+    def post(self):
         raise ValueError('invalid input')
 
 
@@ -72,6 +75,46 @@ class TestClient(tornado.testing.AsyncHTTPTestCase):
         self.assertEqual(self.tracer.spans[0].operation_name, 'foo/GET')
         self.assertEqual(self.tracer.spans[0].tags, {
             'component': 'tornado-client',
+            'span.kind': 'client',
+            'http.url': self.get_url('/'),
+            'http.method': 'GET',
+            'http.status_code': 200,
+        })
+
+    def test_explicit_parameters(self):
+        tornado_opentracing.init_client_tracing(self.tracer)
+
+        self.http_client.fetch(self.get_url('/error'),
+                               self.stop,
+                               raise_error=False,
+                               method='POST',
+                               body='')
+        response = self.wait()
+
+        self.assertEqual(response.code, 500)
+        self.assertEqual(len(self.tracer.spans), 1)
+        self.assertTrue(self.tracer.spans[0].is_finished)
+        self.assertEqual(self.tracer.spans[0].operation_name, 'POST')
+        self.assertEqual(self.tracer.spans[0].tags, {
+            'component': 'tornado',
+            'span.kind': 'client',
+            'http.url': self.get_url('/error'),
+            'http.method': 'POST',
+            'http.status_code': 500,
+        })
+
+    def test_request_obj(self):
+        tornado_opentracing.init_client_tracing(self.tracer)
+
+        self.http_client.fetch(HTTPRequest(self.get_url('/')), self.stop)
+        response = self.wait()
+
+        self.assertEqual(response.code, 200)
+        self.assertEqual(len(self.tracer.spans), 1)
+        self.assertTrue(self.tracer.spans[0].is_finished)
+        self.assertEqual(self.tracer.spans[0].operation_name, 'GET')
+        self.assertEqual(self.tracer.spans[0].tags, {
+            'component': 'tornado',
             'span.kind': 'client',
             'http.url': self.get_url('/'),
             'http.method': 'GET',
