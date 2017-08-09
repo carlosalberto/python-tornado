@@ -77,12 +77,17 @@ def _finish_tracing_callback(future):
 
     exc = future.exception()
     if exc:
-        # Tornado reports requests with code 5xx as exceptions,
-        # so simply set the status_code for them instead of
-        # reporting them as plain errors.
-        if isinstance(exc, HTTPError) and 500 <= exc.code <= 599:
+        # Tornado uses HTTPError to report some of the
+        # codes other than 2xx, so check the code is
+        # actually in the 5xx range - and include the
+        # status code for *all* HTTPError instances.
+        error = True
+        if isinstance(exc, HTTPError):
             status_code = exc.code
-        else:
+            if status_code < 500:
+                error = False
+
+        if error:
             span.set_tag('error', 'true')
             span.set_tag('error.object', exc)
     else:

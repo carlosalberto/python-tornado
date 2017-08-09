@@ -1,6 +1,7 @@
 import unittest
 
 import tornado.gen
+from tornado.httpclient import HTTPError
 import tornado.web
 import tornado.testing
 import tornado_opentracing
@@ -85,10 +86,8 @@ class TestClient(tornado.testing.AsyncHTTPTestCase):
         self.assertEqual(len(self.tracer.spans), 1)
         self.assertTrue(self.tracer.spans[0].is_finished)
         self.assertEqual(self.tracer.spans[0].operation_name, 'GET')
-        self.assertEqual(self.tracer.spans[0].tags, {
-            'component': 'tornado',
-            'span.kind': 'client',
-            'http.url': self.get_url('/error'),
-            'http.method': 'GET',
-            'http.status_code': 500,
-        })
+
+        tags = self.tracer.spans[0].tags
+        self.assertEqual(tags.get('http.status_code', None), 500)
+        self.assertEqual(tags.get('error', None), 'true')
+        self.assertTrue(isinstance(tags.get('error.object', None), HTTPError))
